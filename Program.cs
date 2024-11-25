@@ -83,11 +83,8 @@ public class TextGenerator
 
 class Index
 {
-  // token -> list of all tokens that appear after the token
-  // todo: deal with the duplicates, it would be nice to have a weighted list instead
-  // e.g., https://en.wikipedia.org/wiki/Alias_method, https://github.com/cdanek/KaimiraWeightedList?tab=readme-ov-file
-  private readonly Dictionary<string, List<string>> _bigrams = new();
-  private readonly List<string> _sentenceTerminators = new List<string>();
+  private readonly Dictionary<string, WeightedList<string>> _bigrams = new();
+  private readonly WeightedList<string> _sentenceTerminators = new();
 
   // TODO: Index a directory or a file
   public void IndexFile(string filename)
@@ -109,7 +106,7 @@ class Index
       var current = tokens.ElementAt(i);
       var next = tokens.ElementAt(i + 1);
 
-      var adjacentTokens = _bigrams.GetValueOrDefault(current, new List<string>());
+      var adjacentTokens = _bigrams.GetValueOrDefault(current, new WeightedList<string>());
       adjacentTokens.Add(next);
       _bigrams[current] = adjacentTokens;
     }
@@ -125,11 +122,43 @@ class Index
     }
   }
 
-  public string RandomSentenceTerminatingToken() => _sentenceTerminators.RandomItem();
-  public string RandomToken() => _bigrams.RandomItem().Key;
+  public string RandomSentenceTerminatingToken() => _sentenceTerminators.GetRandom();
+  public string RandomToken() => _bigrams.Keys.RandomItem();
   public string RandomNextToken(string token) => 
-    _bigrams.GetValueOrDefault(token)?.RandomItem() 
+    _bigrams.GetValueOrDefault(token)?.GetRandom()
       ?? throw new ArgumentException($"No bigrams found for {token}");
+}
+
+// Simplified version of https://github.com/cdanek/KaimiraWeightedList, implementation of Walker-Vose "Alias Method"
+public class WeightedList<T> where T : notnull
+{
+    private readonly Dictionary<T, int> _weights = new();
+    private readonly Random _random = new();
+    private int _totalWeight;
+
+    public void Add(T item)
+    {
+        _weights[item] = _weights.GetValueOrDefault(item) + 1;
+        _totalWeight++;
+    }
+
+    public T GetRandom()
+    {
+        if (_totalWeight == 0)
+            throw new InvalidOperationException("List is empty");
+
+        int targetWeight = _random.Next(_totalWeight);
+        int currentWeight = 0;
+
+        foreach (var (item, weight) in _weights)
+        {
+            currentWeight += weight;
+            if (currentWeight > targetWeight)
+                return item;
+        }
+
+        return _weights.Keys.First(); // Fallback that should never be reached
+    }
 }
 
 static class Tokenizer
